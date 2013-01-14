@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from django.forms import TextInput, Media, TextInput, CharField, Form, MultiWidget
+from django.forms import TextInput, EmbeddedCSS, EmbeddedJS, Media, TextInput, CharField, Form, MultiWidget
 from django.template import Template, Context
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -455,6 +455,43 @@ class FormsMediaTestCase(TestCase):
 <link href="/path/to/css3" type="text/css" media="all" rel="stylesheet" />
 <link href="/some/form/css" type="text/css" media="all" rel="stylesheet" />""")
 
+    def test_inline_media(self):
+        ## Inline JavaScript and CSS
+        class MyWidget(TextInput):
+            class Media:
+                css = {'all': (EmbeddedCSS('.mywidget { display: none; }'),)}
+                js = (EmbeddedJS('init_mywidget();'),)
+
+        w = MyWidget()
+        self.assertEqual('<style type="text/css" media="all">.mywidget { display: none; }</style>', str(w.media['css']))
+        self.assertEqual('<script type="text/javascript">init_mywidget();</script>', str(w.media['js']))
+
+    def test_inline_media_property(self):
+        ## Inline JavaScript and CSS as a media property
+        class MyWidget(TextInput):
+            def _media(self):
+                return Media(css={'all': (EmbeddedCSS('.mywidget { display: none; }'),)},
+                             js=(EmbeddedJS('init_mywidget();'),))
+            media = property(_media)
+
+        w = MyWidget()
+        self.assertEqual('<style type="text/css" media="all">.mywidget { display: none; }</style>', str(w.media['css']))
+        self.assertEqual('<script type="text/javascript">init_mywidget();</script>', str(w.media['js']))
+
+    def test_inline_media_mutiple(self):
+        ## Multiple instances of inline media should only be rendered once
+        class MyWidget(TextInput):
+            class Media:
+                css = {'all': (EmbeddedCSS('.mywidget { display: none; }'),)}
+                js = (EmbeddedJS('init_mywidget();'),)
+
+        class MyForm(Form):
+            field1 = CharField(widget=MyWidget)
+            field2 = CharField(widget=MyWidget)
+
+        f = MyForm()
+        self.assertEqual("""<style type="text/css" media="all">.mywidget { display: none; }</style>
+<script type="text/javascript">init_mywidget();</script>""", str(f.media))
 
 @override_settings(
     STATIC_URL='http://media.example.com/static/',

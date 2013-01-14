@@ -22,15 +22,37 @@ from django.utils.safestring import mark_safe
 from django.utils import datetime_safe, formats, six
 
 __all__ = (
-    'Media', 'MediaDefiningClass', 'Widget', 'TextInput', 'PasswordInput',
-    'HiddenInput', 'MultipleHiddenInput', 'ClearableFileInput',
-    'FileInput', 'DateInput', 'DateTimeInput', 'TimeInput', 'Textarea', 'CheckboxInput',
-    'Select', 'NullBooleanSelect', 'SelectMultiple', 'RadioSelect',
-    'CheckboxSelectMultiple', 'MultiWidget',
+    'EmbeddedCSS', 'EmbeddedJS', 'Media', 'MediaDefiningClass', 'Widget',
+    'TextInput', 'PasswordInput', 'HiddenInput', 'MultipleHiddenInput',
+    'ClearableFileInput', 'FileInput', 'DateInput', 'DateTimeInput',
+    'TimeInput', 'Textarea', 'CheckboxInput', 'Select', 'NullBooleanSelect',
+    'SelectMultiple', 'RadioSelect', 'CheckboxSelectMultiple', 'MultiWidget',
     'SplitDateTimeWidget',
 )
 
 MEDIA_TYPES = ('css','js')
+
+class EmbeddedMedia(object):
+    """
+    Base class for adding embedded CSS and JS to a Media class.
+    """
+    def __init__(self, content):
+        self.content = content
+
+    def __eq__(self, other):
+        return (
+            type(self) is type(other) and
+            self.content == other.content
+        )
+
+class EmbeddedCSS(EmbeddedMedia):
+    def render(self, medium=None):
+        medium = medium or 'all'
+        return format_html('<style type="text/css" media="{0}">{1}</style>', medium, mark_safe(self.content))
+
+class EmbeddedJS(EmbeddedMedia):
+    def render(self):
+        return format_html('<script type="text/javascript">{0}</script>', mark_safe(self.content))
 
 @python_2_unicode_compatible
 class Media(object):
@@ -57,16 +79,26 @@ class Media(object):
         return mark_safe('\n'.join(chain(*[getattr(self, 'render_' + name)() for name in MEDIA_TYPES])))
 
     def render_js(self):
-        return [format_html('<script type="text/javascript" src="{0}"></script>', self.absolute_path(path)) for path in self._js]
+        html = []
+        for script in self._js:
+            if isinstance(script, EmbeddedJS):
+                html.append(script.render())
+            else:
+                html.append(format_html('<script type="text/javascript" src="{0}"></script>', self.absolute_path(script)))
+        return html
 
     def render_css(self):
         # To keep rendering order consistent, we can't just iterate over items().
         # We need to sort the keys, and iterate over the sorted list.
+        html = []
         media = sorted(self._css.keys())
-        return chain(*[
-                [format_html('<link href="{0}" type="text/css" media="{1}" rel="stylesheet" />', self.absolute_path(path), medium)
-                    for path in self._css[medium]]
-                for medium in media])
+        for medium in media:
+            for style in self._css[medium]:
+                if isinstance(style, EmbeddedCSS):
+                    html.append(style.render(medium))
+                else:
+                    html.append(format_html('<link href="{0}" type="text/css" media="{1}" rel="stylesheet" />', self.absolute_path(style), medium))
+        return html
 
     def absolute_path(self, path, prefix=None):
         if path.startswith(('http://', 'https://', '/')):
@@ -87,16 +119,16 @@ class Media(object):
 
     def add_js(self, data):
         if data:
-            for path in data:
-                if path not in self._js:
-                    self._js.append(path)
+            for script in data:
+                if script not in self._js:
+                    self._js.append(script)
 
     def add_css(self, data):
         if data:
-            for medium, paths in data.items():
-                for path in paths:
-                    if not self._css.get(medium) or path not in self._css[medium]:
-                        self._css.setdefault(medium, []).append(path)
+            for medium, styles in data.items():
+                for style in styles:
+                    if not self._css.get(medium) or style not in self._css[medium]:
+                        self._css.setdefault(medium, []).append(style)
 
     def __add__(self, other):
         combined = Media()
