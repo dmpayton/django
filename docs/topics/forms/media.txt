@@ -167,6 +167,44 @@ If you require even more control over media inheritance, define your media
 using a :ref:`dynamic property <dynamic-property>`. Dynamic properties give
 you complete control over which media files are inherited, and which are not.
 
+Specifying embedded media
+-------------------------
+
+.. versionadded:: 1.6
+
+At some point you may run into a situation that calls for CSS or JavaScript to
+be rendered directly on the page, perhaps to initialize a plugin. This can be
+accomplished with ``EmbeddedCSS`` and ``EmbeddedJS``::
+
+    >>> class FancyCalendarWidget(CalendarWidget):
+    ...     class Media:
+    ...         css = {
+    ...             'all': ('fancy.css',)
+    ...         }
+    ...         js = (
+    ...             'whizbang.js',
+    ...             forms.EmbeddedJS('init_fancification();'),
+    ...         )
+
+    >>> w = FancyCalendarWidget()
+    >>> print(w.media)
+    <link href="/static/fancy.css" type="text/css" media="all" rel="stylesheet" />
+    <script type="text/javascript" src="/static/whizbang.js"></script>
+    <script type="text/javascript">init_fancification();</script>
+
+Embedded CSS is rendered with the correct ``media`` attribute::
+
+    >>> class HoneypotWidget(forms.TextInput):
+    ...     class Media:
+    ...         css = {
+    ...             'all': (forms.EmbeddedCSS(".honeypot_row { display: none; }"),)
+    ...         }
+
+    >>> w = HoneypotWidget()
+    >>> print(w.media)
+    <style type="text/css" media="all">.honeypot_row { display: none; }</style>
+
+
 .. _dynamic-property:
 
 Media as a dynamic property
